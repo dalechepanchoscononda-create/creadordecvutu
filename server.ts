@@ -64,6 +64,38 @@ async function retryWithBackoff<T>(
   }
 }
 
+// Helper to try a Gemini API call across a list of fallback models with backoff
+async function generateContentWithFallbackModels(
+  client: GoogleGenAI,
+  params: {
+    contents: any;
+    config?: any;
+  },
+  models: string[] = ["gemini-3.5-flash", "gemini-2.5-flash"]
+): Promise<any> {
+  let lastError: any = null;
+
+  for (const model of models) {
+    try {
+      console.log(`Attempting Gemini generation with model: ${model}...`);
+      const response = await retryWithBackoff(() =>
+        client.models.generateContent({
+          model,
+          contents: params.contents,
+          config: params.config,
+        })
+      );
+      return response;
+    } catch (err: any) {
+      console.warn(`Model ${model} failed:`, err.message || err);
+      lastError = err;
+      // Continue to next model in list
+    }
+  }
+
+  throw lastError || new Error("All fallback models failed.");
+}
+
 // Translate endpoint
 app.post("/api/translate", async (req, res) => {
   const { text, texts } = req.body;
@@ -89,16 +121,13 @@ Mantén el orden de los elementos. Retorna un arreglo JSON de cadenas de texto (
 Textos en español:
 ${JSON.stringify(texts)}`;
 
-        const response = await retryWithBackoff(() => 
-          client.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt,
-            config: {
-              systemInstruction: "Eres un traductor profesional bilingüe experto en CVs y currículums. Traduce los textos de español a inglés técnico y profesional. Retorna exclusivamente un arreglo JSON válido (por ejemplo, [\"trad1\", \"trad2\"]). No agregues explicaciones, ni etiquetas markdown de código como ```json.",
-              responseMimeType: "application/json",
-            },
-          })
-        );
+        const response = await generateContentWithFallbackModels(client, {
+          contents: prompt,
+          config: {
+            systemInstruction: "Eres un traductor profesional bilingüe experto en CVs y currículums. Traduce los textos de español a inglés técnico y profesional. Retorna exclusivamente un arreglo JSON válido (por ejemplo, [\"trad1\", \"trad2\"]). No agregues explicaciones, ni etiquetas markdown de código como ```json.",
+            responseMimeType: "application/json",
+          }
+        });
 
         let responseText = response.text || "[]";
         // Clean up markdown formatting if the model ignored mime type instructions
@@ -118,15 +147,12 @@ ${JSON.stringify(texts)}`;
       try {
         const prompt = `Traduce profesionalmente al inglés el siguiente texto de un currículum. Retorna ÚNICAMENTE la traducción limpia, sin comentarios ni explicaciones adicionales:\n\n"${text}"`;
         
-        const response = await retryWithBackoff(() =>
-          client.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt,
-            config: {
-              systemInstruction: "Eres un traductor profesional bilingüe para perfiles profesionales. Traduce el texto al inglés con tono profesional de CV. Retorna únicamente el texto traducido.",
-            },
-          })
-        );
+        const response = await generateContentWithFallbackModels(client, {
+          contents: prompt,
+          config: {
+            systemInstruction: "Eres un traductor profesional bilingüe para perfiles profesionales. Traduce el texto al inglés con tono profesional de CV. Retorna únicamente el texto traducido.",
+          }
+        });
 
         const translation = (response.text || "").trim();
         return res.json({ translation });
