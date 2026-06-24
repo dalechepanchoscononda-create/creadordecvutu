@@ -1,0 +1,6 @@
+{
+  "name": "CV Builder Bilingüe",
+  "description": "Crea tu currículum en español e inglés simultáneamente con traducción automática en tiempo real y descarga en PDF y Word.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
